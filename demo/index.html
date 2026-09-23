@@ -1,0 +1,171 @@
+<!-- Created by Erion Nezha — © 2026 All rights reserved -->
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2D Brick Breaker — Demo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0e14;color:#e6e6e6;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px}
+h1{font-size:1.4rem;margin:6px 0 4px;color:#fff}
+p.hint{color:#9fb3c8;font-size:.9rem;margin-bottom:12px;text-align:center;max-width:640px;line-height:1.5}
+#wrap{position:relative;width:100%;max-width:680px}
+canvas{display:block;width:100%;height:auto;border-radius:12px;border:2px solid #00d4ff44;background:#31f0f0;touch-action:none;cursor:pointer}
+#score{position:absolute;top:10px;left:12px;font:700 17px Arial;color:#5b2d00;background:#ffffffaa;padding:4px 12px;border-radius:8px}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(4,10,18,.82);border-radius:12px;text-align:center;padding:20px;cursor:pointer}
+#overlay h2{font-size:1.6rem;margin-bottom:10px;color:#7fdbff}
+#overlay p{color:#cfd8e3;font-size:.95rem;line-height:1.6;max-width:420px}
+#overlay .btn{margin-top:16px;background:#00d4ff;color:#04121a;font-weight:700;border:none;padding:12px 30px;border-radius:10px;font-size:1rem;cursor:pointer}
+.hidden{display:none!important}
+footer{margin-top:14px;color:#5c6b7f;font-size:.85rem}
+footer strong{color:#9fb3c8}
+</style>
+</head>
+<body>
+<h1>🧱 2D Brick Breaker</h1>
+<p class="hint">Thyeji të gjitha tullat! Lëviz paddle-in me <strong>shigjetat ← →</strong>, me <strong>mouse</strong> ose me <strong>gisht</strong> (touch). Kliko / tap për të nisur.</p>
+<div id="wrap">
+<canvas id="mycanvas" width="650" height="450">Shfletuesi yt nuk e mbështet canvas.</canvas>
+<div id="score">Pikët: 0</div>
+<div id="overlay">
+<h2 id="ovTitle">🎮 Gati?</h2>
+<p id="ovText">Kliko ose tap kudo për të nisur lojën.<br>Kap topin me paddle dhe thyaj 28 tullat!</p>
+<button class="btn" id="ovBtn">Nis lojën</button>
+</div>
+</div>
+<footer>Krijuar nga <strong>Erion Nezha</strong> — © 2026</footer>
+<script>
+(function(){
+"use strict";
+// --- logjika e lojës, e adaptuar nga app.js origjinal ---
+var canvas=document.getElementById('mycanvas');
+var ctx=canvas.getContext('2d');
+var overlay=document.getElementById('overlay');
+var ovTitle=document.getElementById('ovTitle');
+var ovText=document.getElementById('ovText');
+var ovBtn=document.getElementById('ovBtn');
+var scoreEl=document.getElementById('score');
+
+var ballRadius=10;
+var x,y,dx,dy;
+var paddleHeight=12, paddleWidth=72, paddleX;
+var rightPressed=false, leftPressed=false;
+var brickRowCount=4, brickColumnCount=7;
+var brickWidth=72, brickHeight=24, brickPadding=12, brickOffsetTop=32, brickOffsetLeft=32;
+var bricks=[], score=0;
+var state='ready'; // ready | playing | over | won
+var raf=null;
+
+function resetGame(){
+  x=canvas.width/2; y=canvas.height-30; dx=2; dy=-2;
+  paddleX=(canvas.width-paddleWidth)/2;
+  score=0; scoreEl.textContent='Pikët: 0';
+  bricks=[];
+  for(var c=0;c<brickColumnCount;c++){
+    bricks[c]=[];
+    for(var r=0;r<brickRowCount;r++){bricks[c][r]={x:0,y:0,status:1};}
+  }
+}
+function startGame(){
+  resetGame();
+  state='playing';
+  overlay.classList.add('hidden');
+  if(raf)cancelAnimationFrame(raf);
+  loop();
+}
+function showOverlay(title,text,btn){
+  ovTitle.textContent=title; ovText.innerHTML=text; ovBtn.textContent=btn;
+  overlay.classList.remove('hidden');
+}
+function drawBall(){
+  ctx.beginPath();ctx.arc(x,y,ballRadius,0,Math.PI*2);
+  ctx.fillStyle='red';ctx.fill();ctx.closePath();
+}
+function drawPaddle(){
+  ctx.beginPath();ctx.rect(paddleX,canvas.height-paddleHeight,paddleWidth,paddleHeight);
+  ctx.fillStyle='blue';ctx.fill();ctx.closePath();
+}
+function drawBricks(){
+  for(var c=0;c<brickColumnCount;c++){
+    for(var r=0;r<brickRowCount;r++){
+      if(bricks[c][r].status===1){
+        var bx=(c*(brickWidth+brickPadding))+brickOffsetLeft;
+        var by=(r*(brickHeight+brickPadding))+brickOffsetTop;
+        bricks[c][r].x=bx;bricks[c][r].y=by;
+        ctx.beginPath();ctx.rect(bx,by,brickWidth,brickHeight);
+        ctx.fillStyle=(r%2===0)?'#6600cc':'#9933ff';ctx.fill();ctx.closePath();
+      }
+    }
+  }
+}
+function collisionDetection(){
+  for(var c=0;c<brickColumnCount;c++){
+    for(var r=0;r<brickRowCount;r++){
+      var b=bricks[c][r];
+      if(b.status===1 && x>b.x && x<b.x+brickWidth && y>b.y && y<b.y+brickHeight){
+        dy=-dy;b.status=0;score++;scoreEl.textContent='Pikët: '+score;
+        if(score===brickRowCount*brickColumnCount){
+          state='won';
+          showOverlay('🏆 Fitove!','I thyeve të <strong>28 tullat</strong>! Pikët: <strong>'+score+'</strong>','Luaj përsëri');
+          return;
+        }
+      }
+    }
+  }
+}
+function step(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawBricks();drawBall();drawPaddle();
+  collisionDetection();
+  if(state!=='playing')return;
+  if(x+dx>canvas.width-ballRadius||x+dx<ballRadius){dx=-dx;}
+  if(y+dy<ballRadius){dy=-dy;}
+  else if(y+dy>canvas.height-ballRadius){
+    if(x>paddleX&&x<paddleX+paddleWidth){dy=-dy;}
+    else{
+      state='over';
+      showOverlay('💥 Loja mbaroi','Topi ra poshtë! Pikët: <strong>'+score+'</strong> nga 28.','Provo përsëri');
+      return;
+    }
+  }
+  if(rightPressed&&paddleX<canvas.width-paddleWidth){paddleX+=7;}
+  else if(leftPressed&&paddleX>0){paddleX-=7;}
+  x+=dx;y+=dy;
+}
+function loop(){step();if(state==='playing'){raf=requestAnimationFrame(loop);}}
+
+function canvasX(clientX){
+  var rect=canvas.getBoundingClientRect();
+  return (clientX-rect.left)*(canvas.width/rect.width);
+}
+document.addEventListener('keydown',function(e){
+  if(e.keyCode===39)rightPressed=true;
+  else if(e.keyCode===37)leftPressed=true;
+});
+document.addEventListener('keyup',function(e){
+  if(e.keyCode===39)rightPressed=false;
+  else if(e.keyCode===37)leftPressed=false;
+});
+canvas.addEventListener('mousemove',function(e){
+  var relX=canvasX(e.clientX);
+  if(relX>0&&relX<canvas.width){paddleX=relX-paddleWidth/2;}
+});
+canvas.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  var relX=canvasX(e.touches[0].clientX);
+  if(relX>0&&relX<canvas.width){paddleX=relX-paddleWidth/2;}
+},{passive:false});
+function tap(e){if(state!=='playing'){e.preventDefault();startGame();}}
+canvas.addEventListener('touchstart',tap,{passive:false});
+canvas.addEventListener('mousedown',tap);
+overlay.addEventListener('click',function(){if(state!=='playing')startGame();});
+ovBtn.addEventListener('click',function(ev){ev.stopPropagation();if(state!=='playing')startGame();});
+
+resetGame();
+ctx.clearRect(0,0,canvas.width,canvas.height);
+drawBricks();drawBall();drawPaddle();
+})();
+</script>
+</body>
+</html>
